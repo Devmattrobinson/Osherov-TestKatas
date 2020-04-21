@@ -1,37 +1,21 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿
 using TestKatas1.Interfaces;
-using TestKatas1.Services;
 
 namespace TestKatas1
 {
     public class LogAnalyzer
     {
-        private readonly IFileExtensionManager _manager;
-        private readonly IWebService _webService;
-        private readonly IEmailService _emailService;
+        private readonly FileRulesManager _fileManager;
 
-        public LogAnalyzer(IFileExtensionManager mgr, IWebService service, IEmailService emailService)
+        public LogAnalyzer(ILoggerService webService, IEmailService emailService)
         {
-            _manager = mgr;
-            _webService = service;
-            _emailService = emailService;
+           _fileManager = new FileRulesManager(webService, emailService);
         }
-        public bool IsValidLogFileName(string fileName)
-        {
-            if (fileName.Length < 8)
-            {
-                try
-                {
-                    _webService.LogError($"Filename too short: {fileName}");
-                }
-                catch (Exception e)
-                {
-                    _emailService.SendEmail("email1@address.com", "Can't log", e.Message);
-                }
-            }
 
-            return _manager.IsValid(fileName);
+        public void ProcessFile(string fileName)
+        {
+            _fileManager.IsValidExtension(fileName);
+            _fileManager.IsValidFileNameLength(fileName);
         }
     }
 }

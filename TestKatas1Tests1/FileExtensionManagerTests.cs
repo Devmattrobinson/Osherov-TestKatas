@@ -3,6 +3,7 @@ using System;
 using TestKatas1;
 using TestKatas1.Interfaces;
 using FakeItEasy;
+using NuGet.Frameworks;
 using TestKatas1.Models;
 using TestKatas1.Services;
 
@@ -11,15 +12,15 @@ namespace LogAnalyzerUnitTests
     [TestFixture]
     public class LogAnalyzerUnitTests
     {
-        private FileExtensionManager _manager;
-        private IWebService _webService;
+        private IFileRulesManager _fileRulesManager;
+        private ILoggerService _logger;
         private IEmailService _emailService;
 
         [SetUp]
         public void Setup()
         {
-            _manager = A.Fake<FileExtensionManager>();
-            _webService = A.Fake<FakeWebService>();
+            _fileRulesManager = A.Fake<FileRulesManager>();
+            _logger = A.Fake<LoggerService>();
             _emailService = A.Fake<EmailService>();
 
         }
@@ -29,42 +30,42 @@ namespace LogAnalyzerUnitTests
         [TestCase("filewithgoodextension.SLF", true)]
         public void IsValidFileName_BadExtension_ReturnsFalse(string filename, bool expected)
         {
+            bool result = _fileRulesManager.IsValidExtension(filename);
 
-            LogAnalyzer log = MakeAnalyzer(_manager, _webService, _emailService);
-            bool result = log.IsValidLogFileName(filename);
-            
             Assert.AreEqual(expected, result);
         }
 
         [Test]
         public void IsValidFileName_EmptyFileName_Throws()
         {
-            var _analyzer = MakeAnalyzer(_manager, _webService, _emailService);
-            var ex = Assert.Catch<Exception>(() => _analyzer.IsValidLogFileName(""));
+            var analyzer = MakeAnalyzer(_logger, _emailService);
+            var ex = Assert.Catch<Exception>(() => analyzer.ProcessFile(""));
 
             StringAssert.Contains("filename has to be provided", ex.Message);
         }
 
         [Test]
-        public void Analyze_TooShortFileName_CallsWebService()
+        public void Analyze_TooShortFileName_CallsLoggerService()
         {
-            LogAnalyzer log = new LogAnalyzer(_manager, _webService, _emailService);
-            string tooShortFileName = "abc.ext";
-            log.IsValidLogFileName(tooShortFileName);
-            StringAssert.Contains("Filename too short: abc.ext",
-                _webService.LastError);
+            var logger = A.Fake<ILoggerService>();
+            var analyzer = MakeAnalyzer(logger, _emailService);
+            string tooShortFileName = "a.ext";
+            analyzer.ProcessFile(tooShortFileName);
+            A.CallTo(() => logger.LogError($"Filename too short: {tooShortFileName}")).MustHaveHappened();  // Same as the Received method from NSub Api
         }
 
         [Test]
-        public void Analyze_Webservice_SendEmail()
+        public void Analyze_FakeWebservice_SendEmail()
         {
-            FakeWebService stubService = new FakeWebService();
-            stubService.ToThrow = new Exception("fake exception");
+            var stubService = new FakeWebService
+            {
+                ToThrow = new Exception("fake exception")
+            };
             var emailService = new EmailService();
-            var analyzer = MakeAnalyzer(_manager, stubService, emailService);
+            var analyzer = MakeAnalyzer(stubService, emailService);
             string tooShortFileName = "abc.ext";
-            
-            analyzer.IsValidLogFileName(tooShortFileName);
+
+            analyzer.ProcessFile(tooShortFileName);
 
             //Assert.AreEqual(expectedEmail, emailService.Email);
             StringAssert.Contains("email1@address.com", emailService.Email.To);
@@ -72,12 +73,22 @@ namespace LogAnalyzerUnitTests
             StringAssert.Contains("Can't log", emailService.Email.Subject);
         }
 
-        private static LogAnalyzer MakeAnalyzer(IFileExtensionManager mgr, IWebService service, IEmailService emailService)
+        [Test]
+        public void Analyze_logger_SendEmail()
         {
-            return new LogAnalyzer(mgr, service, emailService);
+            var fakeRulesManager = A.Fake<IFileRulesManager>();
+            A.CallTo(() => fakeRulesManager.IsValidFileNameLength("abc.ext")).Throws<Exception>();
+
+            Assert.Throws<Exception>(() => fakeRulesManager.IsValidFileNameLength("abc.ext"));
+        }
+
+
+        private static LogAnalyzer MakeAnalyzer(ILoggerService webService, IEmailService emailService)
+        {
+            return new LogAnalyzer(webService, emailService);
         }
     }
-    public class FakeWebService : IWebService
+    public class FakeWebService : ILoggerService
     {
         public Exception ToThrow;
         public string LastError { get; set; }

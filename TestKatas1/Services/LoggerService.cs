@@ -2,7 +2,7 @@
 
 namespace TestKatas1.Services
 {
-    public class FakeWebService : IWebService
+    public class LoggerService : ILoggerService
     {
         public string LastError { get; set; }
 
